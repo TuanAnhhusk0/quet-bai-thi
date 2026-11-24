@@ -13,8 +13,9 @@ CÁCH DÙNG
 2. Ô "Mã" ở trên cùng: gõ tên lô, ví dụ TO10 -> ảnh đặt tên TO10001.jpg, TO10002.jpg...
    Mỗi môn / mỗi phòng nên dùng một mã riêng.
 3. Đặt phiếu trên mặt bàn tối màu, đưa điện thoại sao cho thấy đủ 10 ô vuông đen ở mép
-   phiếu. Khung xanh hiện quanh phiếu -> giữ yên khoảng nửa giây -> máy tự chụp
+   phiếu. Khung xanh hiện quanh phiếu -> giữ yên khoảng 0,3 giây -> máy tự chụp
    (rung + tiếng bíp). Ảnh được nắn thẳng, làm trắng giấy như máy quét 200 dpi.
+   Chụp xong máy báo ngay, ảnh được nắn trong nền nên thầy đặt phiếu tiếp được luôn.
 4. Thay phiếu khác là máy chụp tiếp. Máy đọc nhanh SBD + mã đề: phiếu đã chụp rồi thì
    không chụp lại (dòng báo đỏ "đã chụp").
    Ảnh nào mờ: đặt lại phiếu đó rồi bấm NÚT TRÒN -> chụp lại, thay ảnh cũ, giữ nguyên tên.

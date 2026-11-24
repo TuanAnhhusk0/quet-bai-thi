@@ -118,14 +118,19 @@ const QUET = (() => {
     const h = homo(dst, goc);   // ánh xạ ngược: điểm ảnh đích → nguồn
     const sw = srcData.width, sh = srcData.height, s = srcData.data;
     const cv = mkCv(outW, outH), ctx = cv.getContext('2d'), out = ctx.createImageData(outW, outH), o = out.data;
+    const s32 = new Uint32Array(s.buffer, s.byteOffset, s.length >> 2), o32 = new Uint32Array(o.buffer), TRANG = 0xffffffff;
     for (let y = 0; y < outH; y++) {
-      for (let x = 0; x < outW; x++) {
-        const w = h[6] * x + h[7] * y + 1, fx = (h[0] * x + h[1] * y + h[2]) / w, fy = (h[3] * x + h[4] * y + h[5]) / w;
-        const i = (y * outW + x) * 4;
-        if (fx < 0 || fy < 0 || fx >= sw - 1 || fy >= sh - 1) { o[i] = o[i + 1] = o[i + 2] = 255; o[i + 3] = 255; continue; }
-        const x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, p = (y0 * sw + x0) * 4, q = p + sw * 4;
-        for (let c = 0; c < 3; c++) o[i + c] = (s[p + c] * (1 - ax) + s[p + 4 + c] * ax) * (1 - ay) + (s[q + c] * (1 - ax) + s[q + 4 + c] * ax) * ay;
-        o[i + 3] = 255;
+      let nx = h[1] * y + h[2], ny = h[4] * y + h[5], nw = h[7] * y + 1, j = y * outW;   // tử/mẫu tuyến tính theo x
+      for (let x = 0; x < outW; x++, j++, nx += h[0], ny += h[3], nw += h[6]) {
+        const fx = nx / nw, fy = ny / nw;
+        if (fx < 0 || fy < 0 || fx >= sw - 1 || fy >= sh - 1) { o32[j] = TRANG; continue; }
+        const x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, p = y0 * sw + x0, q = p + sw;
+        const a = s32[p], b = s32[p + 1], c = s32[q], d = s32[q + 1];
+        const w00 = (1 - ax) * (1 - ay), w01 = ax * (1 - ay), w10 = (1 - ax) * ay, w11 = ax * ay;
+        const r = (a & 255) * w00 + (b & 255) * w01 + (c & 255) * w10 + (d & 255) * w11;
+        const g = (a >> 8 & 255) * w00 + (b >> 8 & 255) * w01 + (c >> 8 & 255) * w10 + (d >> 8 & 255) * w11;
+        const bl = (a >> 16 & 255) * w00 + (b >> 16 & 255) * w01 + (c >> 16 & 255) * w10 + (d >> 16 & 255) * w11;
+        o32[j] = 0xff000000 | (bl << 16) | (g << 8) | r;
       }
     }
     lamTrang(o, outW, outH);
@@ -154,26 +159,30 @@ const QUET = (() => {
         bg[cy * nx + cx] = Math.max(t[cy * nx + cx], s / n);  // không kéo nền xuống vì vùng nhiều mực
       }
     }
+    const X0 = new Int32Array(W), AX = new Float32Array(W), hang = new Float32Array(nx);
+    for (let x = 0; x < W; x++) { const gx = Math.min(nx - 1.001, Math.max(0, x / C - 0.5)); X0[x] = gx | 0; AX[x] = gx - X0[x]; }
     for (let y = 0; y < H; y++) {
       const gy = Math.min(ny - 1.001, Math.max(0, y / C - 0.5)), y0 = gy | 0, ay = gy - y0;
-      for (let x = 0; x < W; x++) {
-        const gx = Math.min(nx - 1.001, Math.max(0, x / C - 0.5)), x0 = gx | 0, ax = gx - x0;
-        const b = (bg[y0 * nx + x0] * (1 - ax) + bg[y0 * nx + x0 + 1] * ax) * (1 - ay) + (bg[(y0 + 1) * nx + x0] * (1 - ax) + bg[(y0 + 1) * nx + x0 + 1] * ax) * ay;
-        const g = Math.min(4, 250 / b), i = (y * W + x) * 4;
-        o[i] = Math.min(255, o[i] * g); o[i + 1] = Math.min(255, o[i + 1] * g); o[i + 2] = Math.min(255, o[i + 2] * g);
+      for (let cx = 0; cx < nx; cx++) hang[cx] = bg[y0 * nx + cx] * (1 - ay) + bg[Math.min(ny - 1, y0 + 1) * nx + cx] * ay;
+      for (let x = 0, i = y * W * 4; x < W; x++, i += 4) {
+        const x0 = X0[x], b = hang[x0] + (hang[Math.min(nx - 1, x0 + 1)] - hang[x0]) * AX[x];
+        const g = b < 62.5 ? 4 : 250 / b;
+        o[i] = o[i] * g; o[i + 1] = o[i + 1] * g; o[i + 2] = o[i + 2] * g;
       }
     }
     // unsharp nhẹ: x + 0,6·(x − trung bình 3x3)
-    const src = new Uint8ClampedArray(o);
-    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-      const i = (y * W + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        const m = (src[i - 4 + c] + src[i + 4 + c] + src[i - W * 4 + c] + src[i + W * 4 + c] + src[i + c] * 4) / 8;
-        o[i + c] = src[i + c] + 0.6 * (src[i + c] - m);
+    const R = W * 4; let tren = o.slice(0, R), giua = o.slice(R, 2 * R);
+    for (let y = 1; y < H - 1; y++) {
+      const duoi = o.slice((y + 1) * R, (y + 2) * R), base = y * R;
+      for (let x = 4; x < R - 4; x++) {
+        if ((x & 3) === 3) continue;
+        const v = giua[x], m = (giua[x - 4] + giua[x + 4] + tren[x] + duoi[x] + v * 4) / 8;
+        o[base + x] = v + 0.6 * (v - m);
       }
+      tren = giua; giua = duoi;
     }
   }
-  const mkCv = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const mkCv = (w, h) => { if (typeof document === 'undefined') return new OffscreenCanvas(w, h); const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
   /* đọc nhanh SBD, mã đề, Phần I, Phần II trên ảnh đã nắn (toạ độ ô tô lấy từ omr.js của phần mềm chấm thi)
      → chuỗi "vân tay" để nhận ra phiếu đã chụp, và hiện SBD cho thầy xem */
   const DY = [260.5, 306.1, 351.7, 397.2, 443.1, 489.6, 536.3, 582.5, 629.0, 675.6];
@@ -182,10 +191,12 @@ const QUET = (() => {
   const P1_Y = [845.5, 885.4, 925.1, 964.9, 1004.9, 1044.9, 1085.4, 1125.9, 1165.8, 1206.1];
   const P2_X = [[184.5, 249.5], [315.2, 381.2], [551.5, 618.8], [684.2, 749.5], [923.0, 988.2], [1054.8, 1119.8], [1291.8, 1357.8], [1423.0, 1489.2]];
   const P2_Y = [1401.0, 1440.9, 1480.5, 1520.5];
-  function docNhanh(cvNan) {
-    const W = cvNan.width, k = W / OUT_W, d = cvNan.getContext('2d').getImageData(0, 0, W, cvNan.height).data, r = Math.max(1, Math.round(7 * k));
+  function docNhanh(cvNan, lat = false) {
+    const W = cvNan.width, Hc = cvNan.height, k = W / OUT_W, d = cvNan.getContext('2d').getImageData(0, 0, W, Hc).data, r = Math.max(1, Math.round(7 * k));
+    const G = GOC_CHUAN, hl = lat ? homo(G, [G[2], G[3], G[0], G[1]]) : null;   // phiếu lộn ngược: điểm chuẩn → vị trí trên ảnh xoay 180°
     const dam = (x, y) => { // độ đậm kênh đỏ quanh tâm ô (nét in hồng gần như biến mất)
-      x = Math.round(x * k); y = Math.round(y * k); let s = 0, n = 0;
+      if (hl) { const w = hl[6] * x + hl[7] * y + 1, X = (hl[0] * x + hl[1] * y + hl[2]) / w; y = (hl[3] * x + hl[4] * y + hl[5]) / w; x = X; }
+      x = Math.round(x * k); y = Math.round(y * k); if (x < r || y < r || x >= W - r || y >= Hc - r) return 0; let s = 0, n = 0;
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { s += d[((y + dy) * W + x + dx) * 4]; n++; }
       return 1 - s / n / 245;
     };
@@ -196,7 +207,24 @@ const QUET = (() => {
     for (let q = 0; q < 40; q++) { const c = chon(P1_X[q / 10 | 0].map(x => dam(x, P1_Y[q % 10]))); p1 += typeof c === 'number' ? 'ABCD'[c] : c; }
     let p2 = '';
     for (let q = 0; q < 8; q++) for (let s = 0; s < 4; s++) { const c = chon(P2_X[q].map(x => dam(x, P2_Y[s]))); p2 += typeof c === 'number' ? 'ĐS'[c] : c; }
+    if (!lat && /[_*]/.test(sbd + made)) { const l = docNhanh(cvNan, true); if (!/[_*]/.test(l.sbd + l.made)) return l; }   // phiếu lộn ngược
     return { sbd, made, chuoi: sbd + made + p1 + p2 };
+  }
+  function docGoc(id, goc, lat = false) {
+    const h = homo(GOC_CHUAN, goc), W = id.width, H = id.height, d = id.data;
+    const tl = Math.hypot(goc[1][0] - goc[0][0], goc[1][1] - goc[0][1]) / (GOC_CHUAN[1][0] - GOC_CHUAN[0][0]), r = Math.max(1, Math.round(6 * tl));
+    const sang = (X, Y) => {
+      const w = h[6] * X + h[7] * Y + 1, x = Math.round((h[0] * X + h[1] * Y + h[2]) / w), y = Math.round((h[3] * X + h[4] * Y + h[5]) / w);
+      if (x < r || y < r || x >= W - r || y >= H - r) return 0;
+      let s = 0, n = 0;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { s += d[((y + dy) * W + x + dx) * 4]; n++; }
+      return s / n;
+    };
+    const chon = vals => { const ref = Math.max(...vals); if (ref < 60) return '_'; const dk = vals.map(v => 1 - v / ref), m = Math.max(...dk), i = dk.indexOf(m); return m > 0.35 ? (dk.filter(v => v > 0.35 && v > m * 0.6).length > 1 ? '*' : i) : '_'; };
+    const so = xs => xs.map(x => chon(DY.map(y => sang(x, y)))).join('');
+    const sbd = so(SBD_X), made = so(MADE_X);
+    if (!lat && /[_*]/.test(sbd + made)) { const l = docGoc(id, [goc[2], goc[3], goc[0], goc[1]], true); if (!/[_*]/.test(l.sbd + l.made)) return l; }   // phiếu lộn ngược
+    return { sbd, made };
   }
   // số kí tự khác nhau giữa hai chuỗi vân tay (cùng phiếu chụp lại: 0–3; phiếu khác: SBD / bài làm khác nhiều)
   const khacNhau = (a, b) => { if (!a || !b) return 999; let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
@@ -209,13 +237,25 @@ const QUET = (() => {
   }
   /* chụp đầy đủ: ảnh nguồn lớn (canvas / ImageBitmap) → dò lại góc chính xác ở ~1400 px → nắn */
   function xuLyAnh(src, sw, sh) {
-    const nho = thuNho(src, sw, sh, Math.min(1400, sw));
+    const nho = thuNho(src, sw, sh, Math.min(1000, sw));
     const r = timPhieu(nho.id);
     if (!r) return null;
     const full = mkCv(sw, sh), ctx = full.getContext('2d', { willReadFrequently: true }); ctx.drawImage(src, 0, 0);
     const goc = r.goc.map(([x, y]) => [x / nho.k, y / nho.k]);
     return { cv: nan(ctx.getImageData(0, 0, sw, sh), goc), goc, r };
   }
-  return { timPhieu, nan, xuLyAnh, thuNho, vanTay, docNhanh, khacNhau, OUT_W, OUT_H, _soi: { xam, nhiPhan, oVuong } };
+  return { timPhieu, nan, xuLyAnh, thuNho, vanTay, docNhanh, docGoc, khacNhau, OUT_W, OUT_H, _soi: { xam, nhiPhan, oVuong, lamTrang, homo } };
 })();
 if (typeof module !== 'undefined') module.exports = QUET;
+// chạy trong luồng nền (Web Worker): nhận ảnh khung hình → nắn, làm trắng, nén JPEG, đọc nhanh
+if (typeof document === 'undefined' && typeof self !== 'undefined' && typeof importScripts === 'function') {
+  self.onmessage = async e => {
+    const { so, bm } = e.data;
+    try {
+      const kq = QUET.xuLyAnh(bm, bm.width, bm.height); bm.close();
+      if (!kq) return self.postMessage({ so, loi: 'khong-thay' });
+      const blob = await kq.cv.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+      self.postMessage({ so, blob, doc: QUET.docNhanh(kq.cv) });
+    } catch (err) { self.postMessage({ so, loi: String(err && err.message || err) }); }
+  };
+}

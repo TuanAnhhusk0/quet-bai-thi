@@ -4,7 +4,6 @@ const video = $('#video'), ve = $('#ve'), vctx = ve.getContext('2d');
 let stream = null, track = null, imgCap = null;
 let tuDong = true, dangChup = false;
 let truoc = null, onDinh = 0, matPhieu = 0, choPhep = true, docCuoi = null, khoaTruoc = '', baoCuoi = ['', ''];
-const SO_KHUNG_ON_DINH = 4;      // số lần dò liên tiếp phiếu đứng yên thì chụp (~0,6 giây)
 const NGUONG_KHAC = 4;           // số ô tô khác nhau tối đa để coi là CÙNG một phiếu (cùng SBD, mã đề)
 const docDu = d => d && !/[_*]/.test(d.sbd + d.made);   // đọc được đủ SBD + mã đề
 // cùng phiếu: SBD, mã đề trùng hẳn và phần tô gần như y hệt (bạn chép bài nhau vẫn khác SBD → không bị coi là trùng)
@@ -55,33 +54,43 @@ let den = false;
 $('#btnDen').onclick = async () => { den = !den; try { await track.applyConstraints({ advanced: [{ torch: den }] }); $('#btnDen').classList.toggle('on', den); } catch { toast('Máy không hỗ trợ đèn'); } };
 
 /* ---------- vòng dò phiếu ---------- */
-function tt(s, kieu = '') { const e = $('#tt'); e.textContent = s; e.className = 'tt ' + kieu; }
+function tt(s, kieu = '') { const e = $('#tt'); if (e.textContent !== s) e.textContent = s; e.className = 'tt ' + kieu; }
+const KHOANG_DO = 40;            // ms nghỉ giữa hai lần dò
+const ON_DINH_MS = 300;          // phiếu đứng yên chừng này thì chụp
+let tuLuc = 0;                   // lúc bắt đầu đứng yên
 function vongLap() {
-  setTimeout(vongLap, 90);
-  if (dangChup || !video.videoWidth || document.hidden) return;
+  if (dangChup || !video.videoWidth || document.hidden) return setTimeout(vongLap, 120);
+  try { doMotLan(); } catch (e) { console.error(e); }
+  setTimeout(vongLap, KHOANG_DO);
+}
+function doMotLan() {
   const vw = video.videoWidth, vh = video.videoHeight;
   const nho = QUET.thuNho(video, vw, vh, 640);
   const r = QUET.timPhieu(nho.id);
   veKhung(r, nho);
   if (!r) {
-    onDinh = 0; truoc = null;
-    if (++matPhieu >= 5 && !choPhep) choPhep = true;      // bỏ phiếu ra ~0,5 giây → cho chụp phiếu kế
+    onDinh = 0; truoc = null; khoaTruoc = '';
+    if (++matPhieu >= 4 && !choPhep) choPhep = true;      // bỏ phiếu ra một chút → cho chụp phiếu kế
     tt(choPhep ? 'Đưa cả phiếu vào khung (thấy đủ 10 ô vuông đen)' : 'Đã chụp – thay phiếu khác', choPhep ? '' : 'ok');
     return;
   }
   matPhieu = 0;
-  // camera vẫn thấy khung: đọc nhanh SBD + mã đề (ảnh nhỏ nên chỉ tin khi 2 lần đọc liên tiếp giống nhau)
-  const d = QUET.docNhanh(QUET.nan(nho.id, r.goc, 551, 779)), khoa = docDu(d) ? d.sbd + d.made : '';
+  // đọc nhanh SBD + mã đề ngay trên ảnh nhỏ (chỉ tin khi 2 lần đọc liên tiếp giống nhau)
+  const d = QUET.docGoc(nho.id, r.goc), khoa = docDu(d) ? d.sbd + d.made : '';
   const chac = khoa && khoa === khoaTruoc; khoaTruoc = khoa;
-  if (!choPhep && chac && (!docDu(docCuoi) || khoa !== docCuoi.sbd + docCuoi.made)) choPhep = true;   // đã thay sang phiếu khác
+  if (!choPhep && chac && docDu(docCuoi) && khoa !== docCuoi.sbd + docCuoi.made) choPhep = true;   // đã thay sang phiếu khác
   if (!choPhep) { tt(...baoCuoi); return; }
-  if (chac) { const cu = ANH.find(a => docDu(a.doc) && a.doc.sbd + a.doc.made === khoa); if (cu) { tt('Phiếu SBD ' + d.sbd + ' đã chụp (' + cu.ten + ') – thay phiếu khác', 'loi'); onDinh = 0; return; } }
+  if (chac) {
+    const cu = ANH.find(a => docDu(a.doc) && a.doc.sbd + a.doc.made === khoa) || DANG.find(a => a.khoa === khoa);
+    if (cu) { tt('Phiếu SBD ' + d.sbd + ' đã chụp' + (cu.ten ? ' (' + cu.ten + ')' : '') + ' – thay phiếu khác', 'loi'); onDinh = 0; return; }
+  }
   const lech = truoc ? Math.max(...r.goc.map((g, i) => Math.hypot(g[0] - truoc[i][0], g[1] - truoc[i][1]))) : 1e9;
   truoc = r.goc;
-  onDinh = lech < nho.id.width * 0.012 ? onDinh + 1 : 0;
-  if (!tuDong) { tt('Thấy phiếu – bấm nút tròn để chụp', 'cho'); return; }
-  if (onDinh >= SO_KHUNG_ON_DINH) chup();
-  else tt('Giữ yên…', 'cho');
+  const now = performance.now();
+  if (lech < nho.id.width * 0.012) { if (!onDinh) tuLuc = now; onDinh++; } else onDinh = 0;
+  if (!tuDong) { tt('Thấy phiếu' + (khoa ? ' SBD ' + d.sbd : '') + ' – bấm nút tròn để chụp', 'cho'); return; }
+  if (onDinh >= 2 && now - tuLuc >= ON_DINH_MS) chup(false, khoa ? d : null);
+  else tt('Giữ yên…' + (khoa ? ' SBD ' + d.sbd : ''), 'cho');
 }
 function veKhung(r, nho) {
   const W = ve.clientWidth, H = ve.clientHeight; if (ve.width !== W) ve.width = W; if (ve.height !== H) ve.height = H;
@@ -94,33 +103,72 @@ function veKhung(r, nho) {
   vctx.beginPath(); r.goc.forEach(([x, y], i) => vctx[i ? 'lineTo' : 'moveTo'](ox + x * k, oy + y * k)); vctx.closePath(); vctx.fill(); vctx.stroke();
 }
 
+/* ---------- xử lý ảnh trong luồng nền (Web Worker): chụp xong báo ngay, thầy đặt phiếu tiếp trong lúc máy nắn ảnh ---------- */
+let THO = null, soPhieu = 0;
+const CHO = new Map();           // số thứ tự → hàm nhận kết quả
+const DANG = [];                 // phiếu đang xử lý (để chặn chụp trùng khi chưa xong)
+try {
+  if ('OffscreenCanvas' in window && new OffscreenCanvas(1, 1).getContext('2d')) {
+    THO = new Worker('quet.js?v=3');
+    THO.onmessage = e => { const f = CHO.get(e.data.so); CHO.delete(e.data.so); f && f(e.data); };
+    THO.onerror = () => { THO = null; CHO.forEach(f => f({ loi: 'worker' })); CHO.clear(); };
+  }
+} catch { THO = null; }
+async function xuLyNen(bm) {
+  if (THO) {
+    const so = ++soPhieu, sao = await createImageBitmap(bm);   // giữ một bản phòng khi luồng nền hỏng
+    const kq = await new Promise(ok => { CHO.set(so, ok); THO.postMessage({ so, bm }, [bm]); });
+    if (kq.loi !== 'worker') { sao.close(); return kq; }
+    bm = sao;
+  }
+  // máy không có luồng nền → làm ngay trên trang
+  const x = QUET.xuLyAnh(bm, bm.width, bm.height); bm.close();
+  if (!x) return { loi: 'khong-thay' };
+  return { blob: await new Promise(ok => x.cv.toBlob(ok, 'image/jpeg', 0.9)), doc: QUET.docNhanh(x.cv) };
+}
+let hangDoi = Promise.resolve();   // lưu ảnh lần lượt theo thứ tự chụp
+async function layKhung() {
+  // video đủ nét (≥ 1800 px) thì lấy thẳng khung hình – nhanh; video thấp thì chụp ảnh độ phân giải cao
+  if (imgCap && Math.max(video.videoWidth, video.videoHeight) < 1800) {
+    try { return await createImageBitmap(await Promise.race([imgCap.takePhoto(), new Promise((_, loi) => setTimeout(() => loi(new Error('chậm')), 2500))])); } catch {}
+  }
+  try { return await createImageBitmap(video); }
+  catch { const c = document.createElement('canvas'); c.width = video.videoWidth; c.height = video.videoHeight; c.getContext('2d').drawImage(video, 0, 0); return createImageBitmap(c); }
+}
+
 /* ---------- chụp ---------- */
-async function chup(tay = false) {
+async function chup(tay = false, docSong = null) {
   if (dangChup) return; dangChup = true;
-  tt('Đang chụp…', 'cho');
-  try {
-    let src, sw, sh, kq = null;
-    if (imgCap) { try { const b = await Promise.race([imgCap.takePhoto(), new Promise((_, loi) => setTimeout(() => loi(new Error('chậm')), 2500))]); src = await createImageBitmap(b); sw = src.width; sh = src.height; kq = QUET.xuLyAnh(src, sw, sh); } catch { kq = null; } }
-    if (!kq) { src = video; sw = video.videoWidth; sh = video.videoHeight; kq = QUET.xuLyAnh(src, sw, sh); }
-    if (!kq) {
-      if (tay) { toast('Không thấy đủ 10 ô vuông đen của phiếu – đưa cả phiếu vào khung'); }
-      onDinh = 0; return;
-    }
-    const doc = QUET.docNhanh(kq.cv), cu = docDu(doc) && ANH.find(a => cungPhieu(doc, a.doc));
-    if (cu && !tay) { docCuoi = doc; choPhep = false; onDinh = 0; truoc = null; baoCuoi = ['Phiếu SBD ' + doc.sbd + ' đã chụp (' + cu.ten + ') – thay phiếu khác', 'loi']; tt(...baoCuoi); return; }
-    const blob = await new Promise(ok => kq.cv.toBlob(ok, 'image/jpeg', 0.9));
-    let ten;
-    if (cu) { // bấm nút chụp tay với phiếu đã có → chụp lại, thay ảnh cũ, giữ nguyên tên
-      cu.blob = blob; cu.t = Date.now(); cu.doc = doc; await DB.them(cu); ten = cu.ten; toast('Đã chụp lại, thay ảnh cũ ' + ten);
-    } else {
-      ten = tenTiepTheo(); const a = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), ten, lo: tienTo(), blob, t: Date.now(), doc };
-      await DB.them(a); ANH.push(a); capNhatDem();
-    }
-    docCuoi = doc; choPhep = false; onDinh = 0; truoc = null;
-    hieuUng(); const u = URL.createObjectURL(blob); $('#anhCuoi').src = u; $('#anhCuoi').hidden = false;
-    baoCuoi = ['✓ Đã chụp ' + ten + (docDu(doc) ? ' – SBD ' + doc.sbd + ', mã ' + doc.made : '') + ' – thay phiếu khác', 'ok']; tt(...baoCuoi);
-  } catch (e) { toast('Lỗi chụp: ' + e.message); }
-  finally { dangChup = false; }
+  let bm;
+  try { bm = await layKhung(); } catch (e) { toast('Lỗi chụp: ' + e.message); dangChup = false; return; }
+  dangChup = false;
+  // báo ngay để thầy thay phiếu, ảnh xử lý sau
+  hieuUng();
+  const muc = { khoa: docDu(docSong) ? docSong.sbd + docSong.made : '' }; DANG.push(muc);
+  choPhep = false; onDinh = 0; truoc = null; docCuoi = docDu(docSong) ? docSong : null;
+  baoCuoi = ['✓ Đã chụp' + (muc.khoa ? ' SBD ' + docSong.sbd : '') + ' – thay phiếu khác', 'ok']; tt(...baoCuoi);
+  const kqP = xuLyNen(bm);
+  hangDoi = hangDoi.then(() => luuKetQua(kqP, tay, muc)).catch(e => toast('Lỗi lưu ảnh: ' + e.message));
+}
+async function luuKetQua(kqP, tay, muc) {
+  const kq = await kqP;
+  DANG.splice(DANG.indexOf(muc), 1);
+  if (kq.loi) {
+    toast(kq.loi === 'khong-thay' ? 'Ảnh vừa chụp bị nhòe, không thấy đủ 10 ô vuông – đặt lại phiếu đó' : 'Lỗi xử lý ảnh: ' + kq.loi, 4000);
+    choPhep = true; return;
+  }
+  const { blob, doc } = kq, cu = docDu(doc) && ANH.find(a => cungPhieu(doc, a.doc));
+  if (!muc.khoa && docDu(doc) && DANG.length === 0 && !choPhep) docCuoi = doc;   // ảnh nhỏ chưa đọc được SBD → dùng kết quả trên ảnh lớn
+  if (cu && !tay) { toast('Phiếu SBD ' + doc.sbd + ' đã có (' + cu.ten + ') – bỏ ảnh trùng'); return; }
+  let ten;
+  if (cu) { // bấm nút chụp tay với phiếu đã có → chụp lại, thay ảnh cũ, giữ nguyên tên
+    cu.blob = blob; cu.t = Date.now(); cu.doc = doc; await DB.them(cu); ten = cu.ten; toast('Đã chụp lại, thay ảnh cũ ' + ten);
+  } else {
+    ten = tenTiepTheo(); const a = { id: Date.now() + '-' + Math.random().toString(36).slice(2, 7), ten, lo: tienTo(), blob, t: Date.now(), doc };
+    await DB.them(a); ANH.push(a); capNhatDem();
+  }
+  const img = $('#anhCuoi'); if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src); img.src = URL.createObjectURL(blob); img.hidden = false;
+  if (!choPhep && DANG.length === 0) baoCuoi = ['✓ ' + ten + (docDu(doc) ? ' – SBD ' + doc.sbd + ', mã ' + doc.made : '') + ' – thay phiếu khác', 'ok'];
 }
 let actx;
 function hieuUng() {
