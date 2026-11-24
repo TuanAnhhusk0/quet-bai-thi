@@ -4,8 +4,11 @@ QUÉT BÀI THI BẰNG ĐIỆN THOẠI (phiếu trắc nghiệm BGD 2025)
 App chạy trên trình duyệt điện thoại (Chrome / Safari), không cần cài từ kho ứng dụng.
 Ảnh chỉ lưu trong điện thoại, không gửi đi đâu cho tới khi thầy bấm Gửi.
 
+ĐỊA CHỈ APP:  https://tuananhhusk0.github.io/quet-bai-thi/
+   (hoặc quét ảnh "QR mo app.png" trong thư mục này bằng camera điện thoại)
+
 CÁCH DÙNG
-1. Mở app (địa chỉ https://...), cho phép dùng camera. Lần đầu có thể bấm
+1. Mở địa chỉ trên, cho phép dùng camera. Lần đầu có thể bấm
    "Thêm vào màn hình chính" để mở như một app, dùng được cả khi không có mạng.
 2. Ô "Mã" ở trên cùng: gõ tên lô, ví dụ TO10 -> ảnh đặt tên TO10001.jpg, TO10002.jpg...
    Mỗi môn / mỗi phòng nên dùng một mã riêng.
@@ -25,6 +28,10 @@ LƯU Ý
 - Trình duyệt chỉ cho mở camera khi trang chạy qua https:// – không mở được bằng cách
   nhấn đúp tệp index.html trên điện thoại.
 - Xoá lô sau khi đã chấm xong để điện thoại đỡ đầy (mỗi ảnh khoảng 0,5 MB).
+
+CẬP NHẬT APP (khi sửa mã): thư mục này là kho git nối với
+  github.com/TuanAnhhusk0/quet-bai-thi – sửa tệp rồi commit + push là trang tự cập nhật
+  sau ~1 phút (tăng số ?v= trong index.html và sw.js để điện thoại lấy bản mới).
 
 TỆP
   index.html, app.js      giao diện, camera, lưu ảnh, tạo .zip
