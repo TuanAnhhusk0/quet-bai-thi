@@ -1,0 +1,32 @@
+QUÉT BÀI THI BẰNG ĐIỆN THOẠI (phiếu trắc nghiệm BGD 2025)
+=========================================================
+
+App chạy trên trình duyệt điện thoại (Chrome / Safari), không cần cài từ kho ứng dụng.
+Ảnh chỉ lưu trong điện thoại, không gửi đi đâu cho tới khi thầy bấm Gửi.
+
+CÁCH DÙNG
+1. Mở app (địa chỉ https://...), cho phép dùng camera. Lần đầu có thể bấm
+   "Thêm vào màn hình chính" để mở như một app, dùng được cả khi không có mạng.
+2. Ô "Mã" ở trên cùng: gõ tên lô, ví dụ TO10 -> ảnh đặt tên TO10001.jpg, TO10002.jpg...
+   Mỗi môn / mỗi phòng nên dùng một mã riêng.
+3. Đặt phiếu trên mặt bàn tối màu, đưa điện thoại sao cho thấy đủ 10 ô vuông đen ở mép
+   phiếu. Khung xanh hiện quanh phiếu -> giữ yên khoảng nửa giây -> máy tự chụp
+   (rung + tiếng bíp). Ảnh được nắn thẳng, làm trắng giấy như máy quét 200 dpi.
+4. Thay phiếu khác là máy chụp tiếp. Máy đọc nhanh SBD + mã đề: phiếu đã chụp rồi thì
+   không chụp lại (dòng báo đỏ "đã chụp").
+   Ảnh nào mờ: đặt lại phiếu đó rồi bấm NÚT TRÒN -> chụp lại, thay ảnh cũ, giữ nguyên tên.
+5. Thiếu sáng: bấm 🔦 Đèn. Tắt tự chụp: bấm nút "🤖 Tự chụp".
+6. Bấm "🗂️ Ảnh": xem lại, xoá ảnh hỏng, chọn lô -> "📤 Gửi tệp .zip" -> gửi qua Zalo /
+   Gmail / Drive... về máy tính (máy không hỗ trợ chia sẻ thì tệp lưu vào Tải xuống).
+7. Trên máy tính, phần mềm Chấm thi trắc nghiệm: tab Nhận dạng -> "🖼️ Chọn tệp ảnh / .zip"
+   (hoặc kéo thả tệp .zip vào khung). Không cần giải nén.
+
+LƯU Ý
+- Trình duyệt chỉ cho mở camera khi trang chạy qua https:// – không mở được bằng cách
+  nhấn đúp tệp index.html trên điện thoại.
+- Xoá lô sau khi đã chấm xong để điện thoại đỡ đầy (mỗi ảnh khoảng 0,5 MB).
+
+TỆP
+  index.html, app.js      giao diện, camera, lưu ảnh, tạo .zip
+  quet.js                 tìm 10 ô vuông đen, nắn phiếu, làm trắng, đọc nhanh SBD
+  sw.js, manifest...      cho chạy khi không có mạng / thêm vào màn hình chính

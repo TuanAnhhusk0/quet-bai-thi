@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0f3d7a">
+<title>Quét bài thi</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root { --pri: #1f5fbf; --ok: #19a34a; --bad: #d23; --bg: #0b1220; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: #fff; font: 15px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  button, select, input { font: inherit; }
+  .man { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  .man[hidden] { display: none; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); background: #0f3d7a; }
+  header b { font-size: 16px; }
+  header .sp { flex: 1; }
+  header input { width: 92px; padding: 6px 8px; border-radius: 8px; border: 0; text-transform: uppercase; font-weight: 700; }
+  .khung { position: relative; flex: 1; overflow: hidden; background: #000; }
+  video, #ve { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  #ve { pointer-events: none; }
+  #chop { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .tt { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: rgba(0,0,0,.65); padding: 6px 14px; border-radius: 20px; white-space: nowrap; font-weight: 600; }
+  .tt.ok { background: rgba(25,163,74,.9); } .tt.cho { background: rgba(230,150,0,.9); } .tt.loi { background: rgba(200,40,40,.9); color: #fff; }
+  .dem { position: absolute; right: 10px; bottom: 10px; background: rgba(0,0,0,.6); border-radius: 10px; padding: 4px 10px; font-size: 13px; }
+  .anhCuoi { position: absolute; left: 10px; bottom: 10px; width: 64px; height: 90px; object-fit: cover; border: 2px solid #fff; border-radius: 6px; background: #333; }
+  .anhCuoi[hidden] { display: none; }
+  footer { display: flex; align-items: center; justify-content: space-around; gap: 6px; padding: 10px 8px; padding-bottom: max(10px, env(safe-area-inset-bottom)); background: #101826; }
+  .nut { background: #243247; color: #fff; border: 0; border-radius: 12px; padding: 10px 12px; min-width: 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; }
+  .nut span { font-size: 22px; line-height: 1; }
+  .nut.on { background: var(--ok); }
+  .chup { width: 72px; height: 72px; border-radius: 50%; border: 5px solid #fff; background: var(--pri); }
+  .chup:active { transform: scale(.94); }
+  .ds { flex: 1; overflow: auto; padding: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; align-content: start; background: #111a2a; }
+  .o { position: relative; background: #fff; border-radius: 6px; overflow: hidden; }
+  .o img { display: block; width: 100%; aspect-ratio: 1653/2338; object-fit: cover; }
+  .o small { display: block; color: #123; text-align: center; font-weight: 700; padding: 2px; font-size: 12px; }
+  .o button { position: absolute; top: 4px; right: 4px; border: 0; border-radius: 50%; width: 28px; height: 28px; background: rgba(210,30,30,.9); color: #fff; font-size: 16px; }
+  .thanh { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; background: #101826; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .thanh button, .thanh select { flex: 1; min-width: 130px; padding: 12px; border: 0; border-radius: 10px; background: #243247; color: #fff; font-weight: 600; }
+  .thanh .pri { background: var(--pri); } .thanh .bad { background: #6b1d1d; }
+  .huongdan { padding: 16px; overflow: auto; flex: 1; background: #111a2a; }
+  .huongdan li { margin: 6px 0; }
+  .loi { color: #ffb4b4; }
+  .xem { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: flex; flex-direction: column; z-index: 9; }
+  .xem[hidden] { display: none; }
+  .xem img { flex: 1; min-height: 0; object-fit: contain; width: 100%; }
+  .xem .thanh { background: transparent; }
+  .toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: #222c; padding: 8px 14px; border-radius: 10px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<!-- MÀN QUÉT -->
+<div class="man" id="manQuet">
+  <header>
+    <b>📷 Quét bài thi</b><span class="sp"></span>
+    <label>Mã: <input id="tienTo" value="BAI" maxlength="10" title="Tiền tố tên ảnh, vd TO10 → TO10001.jpg"></label>
+  </header>
+  <div class="khung" id="khung">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="ve"></canvas>
+    <div id="chop"></div>
+    <div class="tt" id="tt">Đang mở camera…</div>
+    <img class="anhCuoi" id="anhCuoi" hidden alt="">
+    <div class="dem" id="dem">0 ảnh</div>
+  </div>
+  <footer>
+    <button class="nut on" id="btnTuDong"><span>🤖</span>Tự chụp</button>
+    <button class="nut" id="btnDen"><span>🔦</span>Đèn</button>
+    <button class="chup" id="btnChup" aria-label="Chụp"></button>
+    <button class="nut" id="btnDs"><span>🗂️</span>Ảnh</button>
+    <button class="nut" id="btnHd"><span>❔</span>Cách dùng</button>
+  </footer>
+</div>
+
+<!-- MÀN DANH SÁCH ẢNH -->
+<div class="man" id="manDs" hidden>
+  <header><button class="nut" id="btnVe" style="min-width:0;padding:6px 10px">← Quét tiếp</button><span class="sp"></span><b id="dsDem"></b></header>
+  <div class="ds" id="ds"></div>
+  <div class="thanh">
+    <select id="locLo"></select>
+    <button class="pri" id="btnGui">📤 Gửi tệp .zip</button>
+    <button class="bad" id="btnXoaLo">🗑 Xoá ảnh của mã này</button>
+  </div>
+</div>
+
+<!-- MÀN HƯỚNG DẪN -->
+<div class="man" id="manHd" hidden>
+  <header><button class="nut" id="btnHdVe" style="min-width:0;padding:6px 10px">← Quét</button><span class="sp"></span><b>Cách dùng</b></header>
+  <div class="huongdan">
+    <ol>
+      <li>Gõ <b>Mã</b> trên cùng (vd <b>TO10</b>) – ảnh sẽ tên TO10001.jpg, TO10002.jpg…</li>
+      <li>Đặt phiếu trên mặt bàn, nền khác màu phiếu, đủ sáng. Đưa điện thoại để <b>thấy đủ 10 ô vuông đen</b> ở hai mép phiếu.</li>
+      <li>Khung xanh hiện quanh phiếu → <b>giữ yên</b> ~1 giây là máy <b>tự chụp</b> (rung + tiếng tách). Không cần bấm.</li>
+      <li>Thay phiếu khác vào là máy chụp tiếp. Máy đọc nhanh SBD + mã đề: phiếu đã chụp rồi thì không chụp lại (dòng báo đỏ).</li>
+      <li>Ảnh nào bị mờ: đặt lại phiếu đó rồi <b>bấm nút tròn</b> → chụp lại, thay ảnh cũ, giữ nguyên tên.</li>
+      <li>Ảnh đã được <b>nắn thẳng như máy quét</b>, nghiêng hay cong nhẹ đều được.</li>
+      <li>Xong: bấm <b>🗂️ Ảnh</b> → <b>📤 Gửi tệp .zip</b> → gửi qua Zalo / Drive / Gmail cho máy tính. Trên máy tính, phần mềm chấm thi chọn thẳng tệp .zip đó (Nhận dạng → Chọn các tệp ảnh).</li>
+      <li>Thiếu sáng: bấm <b>🔦 Đèn</b>. Muốn chụp ngay: bấm nút tròn.</li>
+    </ol>
+    <p class="loi" id="loiCam"></p>
+  </div>
+</div>
+
+<div class="xem" id="xem" hidden>
+  <img id="xemImg" alt="">
+  <div class="thanh"><button id="xemDong">Đóng</button><button class="bad" id="xemXoa">🗑 Xoá ảnh này</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="quet.js?v=2"></script>
+<script src="app.js?v=4"></script>
+</body>
+</html>
